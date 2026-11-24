@@ -1815,7 +1815,8 @@ body[data-feature="autocomplete"] #formB > .field-row[data-row="pcd"] { display:
   var FOCUS_BAND_MID = 0.55;   // 落位目标：带的中位
   var KB_MIN_GAP     = 24;     // 字段底边距键盘的最小距离
 
-  function revealAboveKeyboard(input, bandMid, forceExactCenter) {
+  var exactKeyboardPositionTimer = null;
+  function revealAboveKeyboard(input, bandMid, forceExactCenter, isSettlePass) {
     keyboard.classList.add('open');
     var screen = input.closest('.screen');
     var content = input.closest('.content');
@@ -1828,8 +1829,9 @@ body[data-feature="autocomplete"] #formB > .field-row[data-row="pcd"] { display:
     var row = input.closest('.field') || input.closest('.field-row');
     if (!row) return;
 
-    var contentTop = content.getBoundingClientRect().top;          // 有效区上界：固定导航以下
-    var kbTop      = phone.getBoundingClientRect().bottom - KB_H;  // 有效区下界：键盘顶
+    /* AI 页的可视区域严格采用：内容区顶边（红框上沿）到键盘最终顶边（红框下沿）。 */
+    var contentTop = content.getBoundingClientRect().top;
+    var kbTop      = phone.getBoundingClientRect().bottom - KB_H;
     var areaH      = kbTop - contentTop;
     if (areaH <= 0) return;
 
@@ -1855,7 +1857,7 @@ body[data-feature="autocomplete"] #formB > .field-row[data-row="pcd"] { display:
        一次补往往刚好抵消，可滚动量仍是 0。按实际余量迭代几轮收敛 */
     if (delta > 0) {
       for (var i = 0; i < 4; i++) {
-        var room = content.scrollHeight - content.clientHeight;
+        var room = content.scrollHeight - content.clientHeight - content.scrollTop;
         if (room >= delta) break;
         var cur = parseFloat(getComputedStyle(content).paddingBottom) || 0;
         content.style.paddingBottom = Math.ceil(cur + (delta - room) + KB_MIN_GAP) + 'px';
@@ -1863,8 +1865,17 @@ body[data-feature="autocomplete"] #formB > .field-row[data-row="pcd"] { display:
     }
     var from = content.scrollTop;
     var to   = Math.max(0, from + delta);
-    if (Math.abs(to - from) < 1) return;
-    animateScroll(content, to, ms(300));
+    if (Math.abs(to - from) >= 1) animateScroll(content, to, ms(300));
+
+    /* 键盘入场完成后再按红框边界复算一次，避免键盘过渡期间的布局变化留下偏差。 */
+    if (forceExactCenter && !isSettlePass) {
+      if (exactKeyboardPositionTimer) clearTimeout(exactKeyboardPositionTimer);
+      exactKeyboardPositionTimer = setTimeout(function () {
+        if (keyboard.classList.contains('open') && document.activeElement === input) {
+          revealAboveKeyboard(input, bandMid, true, true);
+        }
+      }, ms(400));
+    }
   }
   /* 自定义滚动缓动：原生 behavior:'smooth' 时长由浏览器决定（这里 363px 会一眨眼跳完），
      选中联想后的回位需要「看得见的柔和收尾」，所以自己控时长和曲线 */
