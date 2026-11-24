@@ -1815,7 +1815,7 @@ body[data-feature="autocomplete"] #formB > .field-row[data-row="pcd"] { display:
   var FOCUS_BAND_MID = 0.55;   // 落位目标：带的中位
   var KB_MIN_GAP     = 24;     // 字段底边距键盘的最小距离
 
-  function revealAboveKeyboard(input, bandMid) {
+  function revealAboveKeyboard(input, bandMid, forceExactCenter) {
     keyboard.classList.add('open');
     var screen = input.closest('.screen');
     var content = input.closest('.content');
@@ -1845,19 +1845,21 @@ body[data-feature="autocomplete"] #formB > .field-row[data-row="pcd"] { display:
        所以这种情况下保持原位，只在「偏低/贴近键盘」时才上移 */
     var mid    = (bandMid == null) ? FOCUS_BAND_MID : bandMid;   // 默认取舒适带中位；地址联想要更靠上，传 0.30
     var target = contentTop + areaH * mid;
-    var delta  = Math.max(0, center - target);
+    var delta  = forceExactCenter ? center - target : Math.max(0, center - target);
     // 兜底：只要距键盘不足 24px，无论如何都要上移到安全线以上
-    delta = Math.max(delta, rect.bottom + KB_MIN_GAP - kbTop);
-    if (delta < 1) return;
+    if (!forceExactCenter) delta = Math.max(delta, rect.bottom + KB_MIN_GAP - kbTop);
+    if (Math.abs(delta) < 1) return;
 
     /* 先确保内容区真的能滚到目标位置。
        注意不能只看「还差多少」一次性补白：补白加上后可视高度也会跟着变，
        一次补往往刚好抵消，可滚动量仍是 0。按实际余量迭代几轮收敛 */
-    for (var i = 0; i < 4; i++) {
-      var room = content.scrollHeight - content.clientHeight;
-      if (room >= delta) break;
-      var cur = parseFloat(getComputedStyle(content).paddingBottom) || 0;
-      content.style.paddingBottom = Math.ceil(cur + (delta - room) + KB_MIN_GAP) + 'px';
+    if (delta > 0) {
+      for (var i = 0; i < 4; i++) {
+        var room = content.scrollHeight - content.clientHeight;
+        if (room >= delta) break;
+        var cur = parseFloat(getComputedStyle(content).paddingBottom) || 0;
+        content.style.paddingBottom = Math.ceil(cur + (delta - room) + KB_MIN_GAP) + 'px';
+      }
     }
     var from = content.scrollTop;
     var to   = Math.max(0, from + delta);
@@ -1884,6 +1886,16 @@ body[data-feature="autocomplete"] #formB > .field-row[data-row="pcd"] { display:
     }
     scrollAnim = requestAnimationFrame(step);
   }
+
+  /* AI 地址识别页：用户手势滚动内容区时收起键盘，随后恢复普通上下滚动。 */
+  function dismissAiKeyboardOnContentDrag() {
+    if (document.body.dataset.feature !== 'ai' || !keyboard.classList.contains('open')) return;
+    var active = document.activeElement;
+    if (active && active.blur) active.blur();
+    hideKeyboard({ preserveSuggestions:true });
+  }
+  contentB.addEventListener('touchmove', dismissAiKeyboardOnContentDrag, { passive:true });
+  contentB.addEventListener('wheel', dismissAiKeyboardOnContentDrag, { passive:true });
 
   /* 聚焦时字段会滚到内容区顶部，指针在 mouseup 前就已经离开原来的元素，
      click 的 target 随之偏到 .content 上 —— 会被「点空白收起键盘」误判，表现为键盘一闪即收、焦点丢失。
@@ -1933,7 +1945,10 @@ body[data-feature="autocomplete"] #formB > .field-row[data-row="pcd"] { display:
 
       /* 地址、Email 均有自己的 focus 监听和联想逻辑，避免重复触发定位 */
       var focusCfg = cfgOf(inp.id);
-      if (!focusCfg || (!focusCfg.addressSuggest && !focusCfg.emailSuggest)) revealAboveKeyboard(inp);
+      if (!focusCfg || (!focusCfg.addressSuggest && !focusCfg.emailSuggest)) {
+        var isAiFormInput = document.body.dataset.feature === 'ai' && form === formB;
+        revealAboveKeyboard(inp, isAiFormInput ? .5 : undefined, isAiFormInput);
+      }
     });
     form.addEventListener('focusout', function (e) {
       var inp = e.target.closest('.field__input');
@@ -2177,16 +2192,28 @@ body[data-feature="autocomplete"] #formB > .field-row[data-row="pcd"] { display:
     function shownInFormB() {
       return !!holder.closest('#formB');
     }
+    function isAiAddressFeature() {
+      return document.body.dataset.feature === 'ai';
+    }
+    function paddrKeyboardPosition() {
+      return isAiAddressFeature() ? .5 : ADDR_BAND_MID;
+    }
     function shouldOpenPage() {
-      return shownInFormB();
+      return shownInFormB() && !isAiAddressFeature();
     }
 
     paddrInput.addEventListener('focus', function () {
       if (shouldOpenPage()) return;
-      revealAboveKeyboard(paddrInput, ADDR_BAND_MID);
+      revealAboveKeyboard(paddrInput, paddrKeyboardPosition(), isAiAddressFeature());
     });
     paddrInput.addEventListener('input', function () {
       if (shouldOpenPage()) return;
+      // AI 地址识别页的地址字段只作为普通输入框使用：保留键盘，不展示联想面板。
+      if (isAiAddressFeature()) {
+        closePanel();
+        revealAboveKeyboard(paddrInput, paddrKeyboardPosition(), true);
+        return;
+      }
       if (manualMode) {
         revealAboveKeyboard(paddrInput, ADDR_BAND_MID);
         return;
