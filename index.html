@@ -977,6 +977,8 @@ body.is-embed .lab {
 #screenB .field__input,
 #screenB .field__value { align-self:flex-end; }
 #screenB .field__icon { align-self:flex-end; margin-left:8px; }
+/* 手动地址的 State 回填值与同字段 label 共用左侧基线。 */
+#ocrManualState .field__value { text-align:left; }
 
 /* The phone label remains visually aligned with the other field labels even
    though it is nested inside the number-input wrapper in the original HTML. */
@@ -1907,6 +1909,9 @@ body[data-feature="autocomplete"] #formB > .field-row[data-row="pcd"] { display:
   }
   contentB.addEventListener('touchmove', dismissAiKeyboardOnContentDrag, { passive:true });
   contentB.addEventListener('wheel', dismissAiKeyboardOnContentDrag, { passive:true });
+  function revealAiFormInputAtCenter(input) {
+    revealAboveKeyboard(input, .5, true);
+  }
 
   /* 聚焦时字段会滚到内容区顶部，指针在 mouseup 前就已经离开原来的元素，
      click 的 target 随之偏到 .content 上 —— 会被「点空白收起键盘」误判，表现为键盘一闪即收、焦点丢失。
@@ -1958,7 +1963,8 @@ body[data-feature="autocomplete"] #formB > .field-row[data-row="pcd"] { display:
       var focusCfg = cfgOf(inp.id);
       if (!focusCfg || (!focusCfg.addressSuggest && !focusCfg.emailSuggest)) {
         var isAiFormInput = document.body.dataset.feature === 'ai' && form === formB;
-        revealAboveKeyboard(inp, isAiFormInput ? .5 : undefined, isAiFormInput);
+        if (isAiFormInput) revealAiFormInputAtCenter(inp);
+        else revealAboveKeyboard(inp);
       }
     });
     form.addEventListener('focusout', function (e) {
@@ -2215,14 +2221,15 @@ body[data-feature="autocomplete"] #formB > .field-row[data-row="pcd"] { display:
 
     paddrInput.addEventListener('focus', function () {
       if (shouldOpenPage()) return;
-      revealAboveKeyboard(paddrInput, paddrKeyboardPosition(), isAiAddressFeature());
+      if (isAiAddressFeature()) revealAiFormInputAtCenter(paddrInput);
+      else revealAboveKeyboard(paddrInput, paddrKeyboardPosition());
     });
     paddrInput.addEventListener('input', function () {
       if (shouldOpenPage()) return;
       // AI 地址识别页的地址字段只作为普通输入框使用：保留键盘，不展示联想面板。
       if (isAiAddressFeature()) {
         closePanel();
-        revealAboveKeyboard(paddrInput, paddrKeyboardPosition(), true);
+        revealAiFormInputAtCenter(paddrInput);
         return;
       }
       if (manualMode) {
