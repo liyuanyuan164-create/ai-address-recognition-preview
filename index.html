@@ -1941,7 +1941,10 @@ body[data-feature="autocomplete"] #formB > .field-row[data-row="pcd"] { display:
     if (v && v.tagName !== 'INPUT') v.textContent = val;
     setValid(id, true);
   }
-  function setValid(id, ok) { fieldEl(id).classList.toggle('is-valid', !!ok); }
+  function setValid(id, ok) {
+    var field = fieldEl(id);
+    if (field) field.classList.toggle('is-valid', !!ok);
+  }
 
   function setError(id, on) {
     var f = fieldEl(id), r = rowEl(id);
@@ -1957,7 +1960,8 @@ body[data-feature="autocomplete"] #formB > .field-row[data-row="pcd"] { display:
       var inp = e.target.closest('.field__input');
       if (!inp) return;
       setError(inp.id, false);                    // C3：重新聚焦即清错
-      fieldEl(inp.id).classList.remove('is-valid');
+      var inputField = fieldEl(inp.id);
+      if (inputField) inputField.classList.remove('is-valid');
 
       /* 地址、Email 均有自己的 focus 监听和联想逻辑，避免重复触发定位 */
       var focusCfg = cfgOf(inp.id);
